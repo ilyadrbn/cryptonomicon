@@ -4,9 +4,7 @@
       <section>
         <div class="flex">
           <div class="max-w-xs">
-            <label for="wallet" class="block text-sm font-medium text-gray-700">
-              Тикер {{ ticker }}
-            </label>
+            <label for="wallet" class="block text-sm font-medium text-gray-700">Тикер</label>
             <div class="mt-1 relative rounded-md shadow-md">
               <input
                 type="text"
@@ -28,7 +26,6 @@
                 {{ p }}
               </span>
             </div>
-            <div class="text-sm text-red-600">{{ error }}</div>
           </div>
         </div>
         <button
@@ -71,7 +68,7 @@
             <div class="w-full border-t border-gray-200"></div>
             <button
               class="flex items-center justify-center font-medium w-full bg-gray-100 px-4 py-4 sm:px-6 text-md text-gray-500 hover:text-gray-600 hover:bg-gray-200 hover:opacity-20 transition-all focus:outline-none"
-              @click.stop="remove(t)"
+              @click.stop="removeCard(t)"
             >
               <svg
                 class="h-5 w-5"
@@ -102,9 +99,9 @@
           ></div> -->
           <div
             class="bg-purple-800 border w-10"
-            v-for="column in normalizeGraph()"
-            :key="column"
-            :style="`height: ${column}px`"
+            v-for="(graph, index) in normalizeGraph()"
+            :key="index"
+            :style="`height: ${graph}px`"
           ></div>
         </div>
         <button type="button" class="absolute top-0 right-0" @click="selected = null">
@@ -140,12 +137,11 @@ export default {
   name: 'App',
   data() {
     return {
-      error: 'Такой тикер уже добавлен',
-      ticker: null,
-      pattern: ['BTC', 'DOGE', 'BCH', 'CHD'],
-      tickers: [],
-      selected: null,
-      graphStates: []
+      ticker: null, // поле ввода
+      pattern: ['BTC', 'DOGE', 'ETH', 'CHD'], // список доступных тикеров в шаблонах под инпутом
+      tickers: [], // массив, в которых пушим все цены
+      selected: null, // выбранный тикер
+      graphStates: [] // состояния графика
     };
   },
   methods: {
@@ -166,21 +162,27 @@ export default {
               this.graphStates.push(data.USD);
             });
         }, 1000);
-
         this.ticker = null;
       }
     },
-    addPattern(p) {
-      this.ticker = p;
-    },
-    remove(t) {
-      this.tickers.splice(this.tickers.indexOf(t), 1);
-      this.selected = null;
-    },
+    /**
+     * Normalize the graph states based on the maximum and minimum values.
+     *
+     * @return {Array} An array of normalized graph states.
+     */
     normalizeGraph() {
       const maxValue = Math.max(...this.graphStates);
       const minValue = Math.min(...this.graphStates);
-      return this.graphStates.map((state) => ((state - minValue) / (maxValue - minValue)) * 256);
+      return maxValue === minValue
+        ? this.graphStates.map(() => 50)
+        : this.graphStates.map((state) => ((state - minValue) * 256) / (maxValue - minValue));
+    },
+    addPattern(pattern) {
+      this.ticker = pattern;
+    },
+    removeCard(t) {
+      this.tickers.splice(this.tickers.indexOf(t), 1);
+      this.selected = null;
     }
   }
 };
