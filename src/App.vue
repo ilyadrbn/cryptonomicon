@@ -98,7 +98,7 @@
             :key="state"
           ></div> -->
           <div
-            class="bg-purple-800 border w-10"
+            class="bg-purple-800 border w-10 min-h-14"
             v-for="(graph, index) in normalizeGraph()"
             :key="index"
             :style="`height: ${graph}px`"
@@ -161,7 +161,7 @@ export default {
               this.tickers.find((t) => t.name === currentTicker.name).price = data.USD;
               this.graphStates.push(data.USD);
             });
-        }, 1000);
+        }, 3000);
         this.ticker = null;
       }
     },
@@ -174,11 +174,12 @@ export default {
       const maxValue = Math.max(...this.graphStates);
       const minValue = Math.min(...this.graphStates);
       return maxValue === minValue
-        ? this.graphStates.map(() => 50)
-        : this.graphStates.map((state) => ((state - minValue) * 256) / (maxValue - minValue));
+        ? this.graphStates.map(() => 56)
+        : this.graphStates.map((state) => ((state - minValue) * 256) / (maxValue - minValue)); // формула нормализации данных
     },
     addPattern(pattern) {
       this.ticker = pattern;
+      this.add();
     },
     removeCard(t) {
       this.tickers.splice(this.tickers.indexOf(t), 1);
@@ -188,4 +189,4 @@ export default {
 };
 </script>
 
-<style src="./app.css"></style>
+<!-- <style src="./app.css"></style> -->
