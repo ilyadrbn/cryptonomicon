@@ -1,24 +1,50 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
+    <div
+      v-if="false"
+      class="w-100 h-100 fixed inset-0 z-50 flex items-center justify-center bg-purple-800 opacity-80"
+    >
+      <svg
+        class="-ml-1 mr-3 h-12 w-12 animate-spin text-white"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <circle
+          class="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          stroke-width="4"
+        ></circle>
+        <path
+          class="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+        ></path>
+      </svg>
+    </div>
+
     <div class="container">
       <section>
         <div class="flex">
           <div class="max-w-xs">
             <label for="wallet" class="block text-sm font-medium text-gray-700">Тикер</label>
-            <div class="mt-1 relative rounded-md shadow-md">
+            <div class="relative mt-1 rounded-md shadow-md">
               <input
                 type="text"
                 name="wallet"
                 id="wallet"
-                class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
+                class="block w-full rounded-md border-gray-300 pr-10 text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-gray-500 sm:text-sm"
                 placeholder="Например DOGE"
                 v-model="ticker"
                 @keydown.enter="add"
               />
             </div>
-            <div class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap">
+            <div class="flex flex-wrap rounded-md bg-white p-1 shadow-md shadow-md">
               <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
+                class="m-1 inline-flex cursor-pointer items-center rounded-md bg-gray-300 px-2 text-xs font-medium text-gray-800"
                 v-for="p in pattern"
                 :key="p"
                 @click="addPattern(p)"
@@ -31,7 +57,7 @@
         <button
           type="button"
           @click="add"
-          class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          class="my-4 inline-flex items-center rounded-full border border-transparent bg-gray-600 px-4 py-2 text-sm font-medium leading-4 text-white shadow-sm transition-colors duration-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
         >
           <svg
             class="-ml-0.5 mr-2 h-6 w-6"
@@ -50,10 +76,10 @@
       </section>
 
       <template v-if="tickers.length">
-        <hr class="w-full border-t border-gray-600 my-4" />
+        <hr class="my-4 w-full border-t border-gray-600" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
+            class="cursor-pointer overflow-hidden rounded-lg border-solid border-purple-800 bg-white shadow"
             v-for="t in tickers"
             :key="t.name"
             :class="{
@@ -61,13 +87,13 @@
             }"
             @click="selected = t"
           >
-            <div class="px-4 py-5 sm:p-6 text-center">
-              <dt class="text-sm font-medium text-gray-500 truncate">{{ t.name }} - USD</dt>
+            <div class="px-4 py-5 text-center sm:p-6">
+              <dt class="truncate text-sm font-medium text-gray-500">{{ t.name }} - USD</dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ t.price }}</dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
             <button
-              class="flex items-center justify-center font-medium w-full bg-gray-100 px-4 py-4 sm:px-6 text-md text-gray-500 hover:text-gray-600 hover:bg-gray-200 hover:opacity-20 transition-all focus:outline-none"
+              class="text-md flex w-full items-center justify-center bg-gray-100 px-4 py-4 font-medium text-gray-500 transition-all hover:bg-gray-200 hover:text-gray-600 hover:opacity-20 focus:outline-none sm:px-6"
               @click.stop="removeCard(t)"
             >
               <svg
@@ -87,24 +113,24 @@
             </button>
           </div>
         </dl>
-        <hr class="w-full border-t border-gray-600 my-4" />
+        <hr class="my-4 w-full border-t border-gray-600" />
       </template>
       <section class="relative" v-if="selected && tickers.length">
-        <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">{{ selected.name }} - USD</h3>
-        <div class="flex items-end border-gray-600 border-b border-l h-64">
+        <h3 class="my-8 text-lg font-medium leading-6 text-gray-900">{{ selected.name }} - USD</h3>
+        <div class="flex h-64 items-end border-b border-l border-gray-600">
           <!-- <div
             class="bg-purple-800 border w-10 h-24"
             v-for="state in graphStates"
             :key="state"
           ></div> -->
           <div
-            class="bg-purple-800 border w-10 min-h-14"
+            class="min-h-14 w-10 border bg-purple-800"
             v-for="(graph, index) in normalizeGraph()"
             :key="index"
             :style="`height: ${graph}px`"
           ></div>
         </div>
-        <button type="button" class="absolute top-0 right-0" @click="selected = null">
+        <button type="button" class="absolute right-0 top-0" @click="selected = null">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             xmlns:xlink="http://www.w3.org/1999/xlink"
