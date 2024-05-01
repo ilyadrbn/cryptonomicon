@@ -1,5 +1,5 @@
 <template>
-  <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
+  <div class="flex flex-col items-center bg-gray-100 p-6">
     <div
       v-if="loadingState"
       class="w-100 h-100 fixed inset-0 z-50 flex items-center justify-center bg-purple-800 opacity-80"
@@ -38,21 +38,15 @@
                 id="wallet"
                 class="mb-1 block w-full rounded-md border-gray-300 p-2 text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-gray-500"
                 placeholder="Например DOGE"
-                v-model="ticker"
+                v-model="coinSearchInput"
                 @keydown.enter="add"
-                @input="findCoin(), (showException = false)"
+                @input="addingInPatternsField(), (isAddedCoin = false)"
               />
             </div>
-            <div class="flex flex-wrap rounded-md bg-white p-1 shadow-md" v-if="ticker">
-              <!-- <span
-                class="m-1 inline-flex cursor-pointer items-center rounded-md bg-gray-300 px-2 text-xs font-medium text-gray-800"
-                v-for="p in pattern"
-                :key="p"
-                @click="addPattern(p)"
-              > -->
+            <div class="flex flex-wrap rounded-md bg-white p-1 shadow-md" v-if="coinSearchInput">
               <span
                 class="m-1 inline-flex cursor-pointer items-center rounded-md bg-gray-300 px-2 text-xs font-medium text-gray-800"
-                v-for="(p, idx) in pattern"
+                v-for="(p, idx) in patternsField"
                 :key="idx"
                 @click="addPattern(p)"
               >
@@ -61,7 +55,7 @@
             </div>
           </div>
         </div>
-        <div v-if="showException" class="text-sm text-red-600">Такой тикер уже добавлен</div>
+        <div v-if="isAddedCoin" class="text-sm text-red-600">Такой тикер уже добавлен</div>
         <button
           type="button"
           @click="add()"
@@ -83,17 +77,39 @@
         </button>
       </section>
 
-      <template v-if="tickers.length">
+      <template v-if="arrayOfAddedCoins.length">
         <hr class="my-4 w-full border-t border-gray-600" />
+        <div>
+          Фильтрация
+          <input
+            v-model="findInput"
+            @input="findInTable()"
+            class="mb-1 rounded-md border-gray-300 p-2 text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-gray-500"
+          />
+          {{ numOfPage }}
+          <button
+            @click="numOfPage--, paginationPages()"
+            :disabled="numOfPage === 1"
+            class="inline-flex items-center rounded-full border border-transparent bg-gray-600 px-2 py-1 text-sm font-medium leading-4 text-white shadow-sm transition-colors duration-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+          >
+            &#8592;
+          </button>
+          <button
+            @click="numOfPage++, paginationPages()"
+            class="inline-flex items-center rounded-full border border-transparent bg-gray-600 px-2 py-1 text-sm font-medium leading-4 text-white shadow-sm transition-colors duration-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+          >
+            &#8594;
+          </button>
+        </div>
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
             class="cursor-pointer overflow-hidden rounded-lg border-solid border-purple-800 bg-white shadow"
-            v-for="t in tickers"
+            v-for="t in findInTable()"
             :key="t.name"
             :class="{
-              'border-2': selected === t
+              'border-2': selectedCoin === t
             }"
-            @click="selected = t"
+            @click="selectedCoin = t"
           >
             <div class="px-4 py-5 text-center sm:p-6">
               <dt class="truncate text-sm font-medium text-gray-500">
@@ -123,16 +139,17 @@
             </button>
           </div>
         </dl>
+
         <hr class="my-4 w-full border-t border-gray-600" />
       </template>
-      <section class="relative" v-if="selected && tickers.length">
+      <section class="relative" v-if="selectedCoin && arrayOfAddedCoins.length">
         <h3 class="my-8 text-lg font-medium leading-6 text-gray-900">
-          {{ selected.name.toUpperCase() }} - USD
+          {{ selectedCoin.name.toUpperCase() }} - USD
         </h3>
         <div class="flex h-64 items-end border-b border-l border-gray-600">
           <!-- <div
             class="bg-purple-800 border w-10 h-24"
-            v-for="state in graphStates"
+            v-for="state in graphState"
             :key="state"
           ></div> -->
           <div
@@ -142,7 +159,7 @@
             :style="`height: ${graph}px`"
           ></div>
         </div>
-        <button type="button" class="absolute right-0 top-0" @click="selected = null">
+        <button type="button" class="absolute right-0 top-0" @click="selectedCoin = null">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -176,13 +193,15 @@ export default {
   data() {
     return {
       loadingState: true,
-      showException: false,
-      ticker: null, // поле ввода
-      pattern: [], // список доступных тикеров в шаблонах под инпутом
-      tickers: [], // массив, в которых пушим все цены
-      selected: null, // выбранный тикер
-      graphStates: [], // состояния графика
-      fetchCoins: null
+      isAddedCoin: false,
+      coinSearchInput: '',
+      patternsField: [],
+      arrayOfAddedCoins: [],
+      selectedCoin: null,
+      graphState: [],
+      fetchCoins: null,
+      findInput: '',
+      numOfPage: 1
     };
   },
   created() {
@@ -193,80 +212,92 @@ export default {
       return coins.Data;
     })();
 
-    const tickersData = localStorage.getItem('cryptonomicon-list');
-    if (tickersData) {
-      this.tickers = JSON.parse(tickersData);
-      this.tickers.forEach(ticker => { 
-        this.subscribeToUpdates(ticker.name);
-      })
+    const coinsDataLS = localStorage.getItem('cryptonomicon-list');
+
+    if (coinsDataLS) {
+      this.arrayOfAddedCoins = JSON.parse(coinsDataLS);
+      this.arrayOfAddedCoins.forEach((coin) => {
+        this.subscribeToUpdates(coin.name);
+      });
     }
   },
   methods: {
-    subscribeToUpdates(tickerName) {
+    subscribeToUpdates(coinName) {
       setInterval(async () => {
-        await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD`)
+        await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${coinName}&tsyms=USD`)
           .then((res) => res.json())
           .then((data) => {
-            this.tickers.find((t) => t.name === tickerName).price = data.USD;
-            this.graphStates.push(data.USD);
+            this.arrayOfAddedCoins.find((t) => t.name === coinName).price = data.USD;
+            this.graphState.push(data.USD);
           });
       }, 3000);
     },
 
-    findCoin() {
-      this.fetchCoins.then((coins) => {
-        for (const key in coins) {
-          if (coins[key].Symbol.startsWith(this.ticker.toUpperCase(), 0)) {
-            this.pattern.push(coins[key].Symbol);
-            if (this.pattern.length > 4) this.pattern.shift();
-          }
-        }
+    addingInPatternsField() {
+      this.fetchCoins.then((coinsList) => {
+        const filteredCoins = Object.values(coinsList).filter((coin) =>
+          coin.Symbol.startsWith(this.coinSearchInput.toUpperCase())
+        );
+
+        this.patternsField = filteredCoins.slice(0, 4).map((coin) => coin.Symbol);
       });
     },
+
     findInTable() {
-      return this.tickers.find((t) => t.name.toUpperCase() === this.ticker.toUpperCase());
+      this.paginationPages();
+      return this.paginationPages().filter((coin) =>
+        coin.name.toUpperCase().startsWith(this.findInput.toUpperCase())
+      );
     },
+
+    paginationPages() {
+      const start = (this.numOfPage - 1) * 6;
+      const end = this.numOfPage * 6;
+      return this.arrayOfAddedCoins
+        .filter((coin) => coin.name.toUpperCase().includes(this.findInput.toUpperCase()))
+        .slice(start, end);
+    },
+
     add() {
-      if (this.ticker && !this.findInTable()) {
+      const isCoinInArr = this.arrayOfAddedCoins.find(
+        (coin) => coin.name.toUpperCase() === this.coinSearchInput.toUpperCase()
+      );
+      if (this.coinSearchInput && !isCoinInArr) {
         const currentTicker = {
-          name: this.ticker,
+          name: this.coinSearchInput,
           price: 0
         };
-        this.tickers.push(currentTicker);
+        this.arrayOfAddedCoins.push(currentTicker);
 
-        localStorage.setItem('cryptonomicon-list', JSON.stringify(this.tickers));
+        localStorage.setItem('cryptonomicon-list', JSON.stringify(this.arrayOfAddedCoins));
 
         this.subscribeToUpdates(currentTicker.name);
 
-        this.ticker = null;
-        this.showException = false;
-      } else if (this.findInTable) {
-        this.showException = true;
+        this.coinSearchInput = null;
+        this.isAddedCoin = false;
+      } else {
+        this.isAddedCoin = true;
       }
     },
 
-    /**
-     * Normalize the graph states based on the maximum and minimum values.
-     *
-     * @return {Array} An array of normalized graph states.
-     */
     normalizeGraph() {
-      const maxValue = Math.max(...this.graphStates);
-      const minValue = Math.min(...this.graphStates);
+      const maxValue = Math.max(...this.graphState);
+      const minValue = Math.min(...this.graphState);
       return maxValue === minValue
-        ? this.graphStates.map(() => 56)
-        : this.graphStates.map((state) => ((state - minValue) * 256) / (maxValue - minValue)); // формула нормализации данных
+        ? this.graphState.map(() => 56)
+        : this.graphState.map((state) => ((state - minValue) * 256) / (maxValue - minValue)); // формула нормализации данных
     },
+
     addPattern(pattern) {
-      this.ticker = pattern;
+      this.coinSearchInput = pattern;
       this.add();
     },
+
     removeCard(t) {
-      this.tickers.splice(this.tickers.indexOf(t), 1);
-      this.selected = null;
+      this.arrayOfAddedCoins.splice(this.arrayOfAddedCoins.indexOf(t), 1);
+      localStorage.setItem('cryptonomicon-list', JSON.stringify(this.arrayOfAddedCoins));
+      this.selectedCoin = null;
     }
   }
 };
 </script>
-
-<!-- <style src="./app.css"></style> -->
