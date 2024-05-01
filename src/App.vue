@@ -96,6 +96,7 @@
           </button>
           <button
             @click="numOfPage++, paginationPages()"
+            :disabled="numOfPage === Math.ceil(arrayOfAddedCoins.length / 6)"
             class="inline-flex items-center rounded-full border border-transparent bg-gray-600 px-2 py-1 text-sm font-medium leading-4 text-white shadow-sm transition-colors duration-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
           >
             &#8594;
@@ -147,11 +148,6 @@
           {{ selectedCoin.name.toUpperCase() }} - USD
         </h3>
         <div class="flex h-64 items-end border-b border-l border-gray-600">
-          <!-- <div
-            class="bg-purple-800 border w-10 h-24"
-            v-for="state in graphState"
-            :key="state"
-          ></div> -->
           <div
             class="min-h-14 w-10 border bg-purple-800"
             v-for="(graph, index) in normalizeGraph()"
@@ -198,7 +194,7 @@ export default {
       patternsField: [],
       arrayOfAddedCoins: [],
       selectedCoin: null,
-      graphState: [],
+      graphStates: {},
       fetchCoins: null,
       findInput: '',
       numOfPage: 1
@@ -221,14 +217,16 @@ export default {
       });
     }
   },
+
   methods: {
     subscribeToUpdates(coinName) {
+      this.graphStates[coinName.toUpperCase()] = new Array();
       setInterval(async () => {
         await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${coinName}&tsyms=USD`)
           .then((res) => res.json())
           .then((data) => {
             this.arrayOfAddedCoins.find((t) => t.name === coinName).price = data.USD;
-            this.graphState.push(data.USD);
+            this.graphStates[coinName.toUpperCase()].push(data.USD);
           });
       }, 3000);
     },
@@ -238,7 +236,6 @@ export default {
         const filteredCoins = Object.values(coinsList).filter((coin) =>
           coin.Symbol.startsWith(this.coinSearchInput.toUpperCase())
         );
-
         this.patternsField = filteredCoins.slice(0, 4).map((coin) => coin.Symbol);
       });
     },
@@ -281,11 +278,12 @@ export default {
     },
 
     normalizeGraph() {
-      const maxValue = Math.max(...this.graphState);
-      const minValue = Math.min(...this.graphState);
+      const choosenCoin = this.graphStates[this.selectedCoin.name.toUpperCase()];
+      const maxValue = Math.max(...choosenCoin);
+      const minValue = Math.min(...choosenCoin);
       return maxValue === minValue
-        ? this.graphState.map(() => 56)
-        : this.graphState.map((state) => ((state - minValue) * 256) / (maxValue - minValue)); // формула нормализации данных
+        ? choosenCoin.map(() => 56)
+        : choosenCoin.map((state) => ((state - minValue) * 256) / (maxValue - minValue)); // формула нормализации данных
     },
 
     addPattern(pattern) {
