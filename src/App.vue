@@ -83,20 +83,19 @@
           Фильтрация
           <input
             v-model="findInput"
-            @input="findInTable()"
             class="mb-1 rounded-md border-gray-300 p-2 text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-gray-500"
           />
           {{ numOfPage }}
           <button
-            @click="numOfPage--, paginationPages()"
+            @click="numOfPage--"
             :disabled="numOfPage === 1"
             class="inline-flex items-center rounded-full border border-transparent bg-gray-600 px-2 py-1 text-sm font-medium leading-4 text-white shadow-sm transition-colors duration-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
           >
             &#8592;
           </button>
           <button
-            @click="numOfPage++, paginationPages()"
-            :disabled="numOfPage === Math.ceil(arrayOfAddedCoins.length / 6)"
+            @click="numOfPage++"
+            :disabled="!hasNextPage"
             class="inline-flex items-center rounded-full border border-transparent bg-gray-600 px-2 py-1 text-sm font-medium leading-4 text-white shadow-sm transition-colors duration-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
           >
             &#8594;
@@ -105,7 +104,7 @@
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
             class="cursor-pointer overflow-hidden rounded-lg border-solid border-purple-800 bg-white shadow"
-            v-for="t in findInTable()"
+            v-for="t in slicedTable"
             :key="t.name"
             :class="{
               'border-2': selectedCoin === t
@@ -121,7 +120,7 @@
             <div class="w-full border-t border-gray-200"></div>
             <button
               class="text-md flex w-full items-center justify-center bg-gray-100 px-4 py-4 font-medium text-gray-500 transition-all hover:bg-gray-200 hover:text-gray-600 hover:opacity-20 focus:outline-none sm:px-6"
-              @click.stop="removeCard(t)"
+              @click.stop="handleDelete(t)"
             >
               <svg
                 class="h-5 w-5"
@@ -150,7 +149,7 @@
         <div class="flex h-64 items-end border-b border-l border-gray-600">
           <div
             class="min-h-14 w-10 border bg-purple-800"
-            v-for="(graph, index) in normalizeGraph()"
+            v-for="(graph, index) in normalizedGraph"
             :key="index"
             :style="`height: ${graph}px`"
           ></div>
@@ -218,17 +217,60 @@ export default {
     }
   },
 
+  computed: {
+    startIndex() {
+      return (this.numOfPage - 1) * 6;
+    },
+
+    endIndex() {
+      return this.numOfPage * 6;
+    },
+
+    /**
+     * Main function for search in table.
+     * By default return full table and slice in computed
+     * * slicedTable
+     */
+    filteredCoins() {
+      return this.arrayOfAddedCoins.filter((coin) =>
+        coin.name.toUpperCase().startsWith(this.findInput.toUpperCase())
+      );
+    },
+
+    slicedTable() {
+      return this.filteredCoins.slice(this.startIndex, this.endIndex);
+    },
+
+    hasNextPage() {
+      return this.filteredCoins.length > this.endIndex;
+    },
+
+    normalizedGraph() {
+      const choosenCoin = this.graphStates[this.selectedCoin.name.toUpperCase()];
+      const maxValue = Math.max(...choosenCoin);
+      const minValue = Math.min(...choosenCoin);
+      return maxValue === minValue
+        ? choosenCoin.map(() => 56)
+        : choosenCoin.map((state) => ((state - minValue) * 256) / (maxValue - minValue));
+      /** data normalization
+       * ? https://wiki.loginom.ru/articles/data-normalization.html
+       */
+    }
+  },
+
   methods: {
     subscribeToUpdates(coinName) {
       this.graphStates[coinName.toUpperCase()] = new Array();
       setInterval(async () => {
-        await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${coinName}&tsyms=USD`)
+        await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${coinName}&tsyms=USD&api_key=d3bbe919bf07cff37ac0ea6d81c1bfd010ed648112dc7061b8f3c5898e56aa79`
+        )
           .then((res) => res.json())
           .then((data) => {
-            this.arrayOfAddedCoins.find((t) => t.name === coinName).price = data.USD;
+            this.arrayOfAddedCoins.find((coin) => coin.name === coinName).price = data.USD;
             this.graphStates[coinName.toUpperCase()].push(data.USD);
           });
-      }, 3000);
+      }, 60000);
     },
 
     addingInPatternsField() {
@@ -240,21 +282,6 @@ export default {
       });
     },
 
-    findInTable() {
-      this.paginationPages();
-      return this.paginationPages().filter((coin) =>
-        coin.name.toUpperCase().startsWith(this.findInput.toUpperCase())
-      );
-    },
-
-    paginationPages() {
-      const start = (this.numOfPage - 1) * 6;
-      const end = this.numOfPage * 6;
-      return this.arrayOfAddedCoins
-        .filter((coin) => coin.name.toUpperCase().includes(this.findInput.toUpperCase()))
-        .slice(start, end);
-    },
-
     add() {
       const isCoinInArr = this.arrayOfAddedCoins.find(
         (coin) => coin.name.toUpperCase() === this.coinSearchInput.toUpperCase()
@@ -264,37 +291,44 @@ export default {
           name: this.coinSearchInput,
           price: 0
         };
+
         this.arrayOfAddedCoins.push(currentTicker);
-
-        localStorage.setItem('cryptonomicon-list', JSON.stringify(this.arrayOfAddedCoins));
-
         this.subscribeToUpdates(currentTicker.name);
 
-        this.coinSearchInput = null;
+        this.coinSearchInput = '';
+        this.findInput = '';
+
         this.isAddedCoin = false;
       } else {
         this.isAddedCoin = true;
       }
     },
-
-    normalizeGraph() {
-      const choosenCoin = this.graphStates[this.selectedCoin.name.toUpperCase()];
-      const maxValue = Math.max(...choosenCoin);
-      const minValue = Math.min(...choosenCoin);
-      return maxValue === minValue
-        ? choosenCoin.map(() => 56)
-        : choosenCoin.map((state) => ((state - minValue) * 256) / (maxValue - minValue)); // формула нормализации данных
-    },
-
     addPattern(pattern) {
       this.coinSearchInput = pattern;
       this.add();
     },
 
-    removeCard(t) {
-      this.arrayOfAddedCoins.splice(this.arrayOfAddedCoins.indexOf(t), 1);
-      localStorage.setItem('cryptonomicon-list', JSON.stringify(this.arrayOfAddedCoins));
+    handleDelete(coin) {
+      this.arrayOfAddedCoins = this.arrayOfAddedCoins.filter((c) => c !== coin);
       this.selectedCoin = null;
+    }
+  },
+  watch: {
+    /**
+     * ! deep watching is triggered when properties of array/object are changed, unlike normal watching
+     * ? deep: true
+     */
+    arrayOfAddedCoins: {
+      handler() {
+        localStorage.setItem('cryptonomicon-list', JSON.stringify(this.arrayOfAddedCoins));
+      },
+      deep: true
+    },
+    findInput() {
+      this.numOfPage = 1;
+    },
+    slicedTable() {
+      this.slicedTable.length === 0 && this.numOfPage > 1 ? this.numOfPage-- : null;
     }
   }
 };
