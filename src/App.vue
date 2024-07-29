@@ -39,11 +39,14 @@
                 class="mb-1 block w-full rounded-md border-gray-300 p-2 text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-gray-500"
                 placeholder="Например DOGE"
                 v-model="coinSearchInput"
-                @keydown.enter="add"
-                @input="addingInPatternsField(), (isAddedCoin = false)"
+                @keydown.enter="addCoin"
+                @input="isAddedCoin = false"
               />
             </div>
-            <div class="flex flex-wrap rounded-md bg-white p-1 shadow-md" v-if="coinSearchInput">
+            <div
+              class="flex flex-wrap rounded-md bg-white p-1 shadow-md"
+              v-if="coinSearchInput && patternsField.length"
+            >
               <span
                 class="m-1 inline-flex cursor-pointer items-center rounded-md bg-gray-300 px-2 text-xs font-medium text-gray-800"
                 v-for="(p, idx) in patternsField"
@@ -58,7 +61,7 @@
         <div v-if="isAddedCoin" class="text-sm text-red-600">Такой тикер уже добавлен</div>
         <button
           type="button"
-          @click="add()"
+          @click="addCoin()"
           class="my-4 inline-flex items-center rounded-full border border-transparent bg-gray-600 px-4 py-2 text-sm font-medium leading-4 text-white shadow-sm transition-colors duration-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
         >
           <svg
@@ -82,7 +85,7 @@
         <div>
           Фильтрация
           <input
-            v-model="findInput"
+            v-model="filterInput"
             class="mb-1 rounded-md border-gray-300 p-2 text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-gray-500"
           />
           {{ numOfPage }}
@@ -183,19 +186,26 @@
 </template>
 
 <script>
+import { loadCoins } from './api';
+
 export default {
   name: 'App',
   data() {
     return {
+      coinSearchInput: '',
+      filterInput: '',
+
       loadingState: true,
       isAddedCoin: false,
-      coinSearchInput: '',
-      patternsField: [],
-      arrayOfAddedCoins: [],
-      selectedCoin: null,
+
+      arrayOfAddedCoins: [], // * array of objects type {name: 'DOGE', price: 0}
+
       graphStates: {},
+
+      patternsField: [], // * плашка под coinSearchInput
+
+      selectedCoin: null,
       fetchCoins: null,
-      findInput: '',
       numOfPage: 1
     };
   },
@@ -226,14 +236,9 @@ export default {
       return this.numOfPage * 6;
     },
 
-    /**
-     * Main function for search in table.
-     * By default return full table and slice in computed
-     * * slicedTable
-     */
     filteredCoins() {
       return this.arrayOfAddedCoins.filter((coin) =>
-        coin.name.toUpperCase().startsWith(this.findInput.toUpperCase())
+        coin.name.toUpperCase().startsWith(this.filterInput.toUpperCase())
       );
     },
 
@@ -252,9 +257,7 @@ export default {
       return maxValue === minValue
         ? choosenCoin.map(() => 56)
         : choosenCoin.map((state) => ((state - minValue) * 256) / (maxValue - minValue));
-      /** data normalization
-       * ? https://wiki.loginom.ru/articles/data-normalization.html
-       */
+      // ? https://wiki.loginom.ru/articles/data-normalization.html
     }
   },
 
@@ -262,31 +265,17 @@ export default {
     subscribeToUpdates(coinName) {
       this.graphStates[coinName.toUpperCase()] = new Array();
       setInterval(async () => {
-        await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${coinName}&tsyms=USD&api_key=d3bbe919bf07cff37ac0ea6d81c1bfd010ed648112dc7061b8f3c5898e56aa79`
-        )
-          .then((res) => res.json())
-          .then((data) => {
-            this.arrayOfAddedCoins.find((coin) => coin.name === coinName).price = data.USD;
-            this.graphStates[coinName.toUpperCase()].push(data.USD);
-          });
-      }, 60000);
+        const dataExchange = await loadCoins(coinName);
+        this.arrayOfAddedCoins.find((coin) => coin.name === coinName).price = dataExchange.USD;
+        this.graphStates[coinName.toUpperCase()].push(dataExchange.USD);
+      }, 5000);
     },
 
-    addingInPatternsField() {
-      this.fetchCoins.then((coinsList) => {
-        const filteredCoins = Object.values(coinsList).filter((coin) =>
-          coin.Symbol.startsWith(this.coinSearchInput.toUpperCase())
-        );
-        this.patternsField = filteredCoins.slice(0, 4).map((coin) => coin.Symbol);
-      });
-    },
-
-    add() {
+    addCoin() {
       const isCoinInArr = this.arrayOfAddedCoins.find(
         (coin) => coin.name.toUpperCase() === this.coinSearchInput.toUpperCase()
       );
-      if (this.coinSearchInput && !isCoinInArr) {
+      if (this.coinSearchInput && !isCoinInArr && this.patternsField.length) {
         const currentTicker = {
           name: this.coinSearchInput,
           price: 0
@@ -296,16 +285,17 @@ export default {
         this.subscribeToUpdates(currentTicker.name);
 
         this.coinSearchInput = '';
-        this.findInput = '';
+        this.filterInput = '';
 
         this.isAddedCoin = false;
       } else {
         this.isAddedCoin = true;
       }
     },
+
     addPattern(pattern) {
       this.coinSearchInput = pattern;
-      this.add();
+      this.addCoin();
     },
 
     handleDelete(coin) {
@@ -324,11 +314,22 @@ export default {
       },
       deep: true
     },
-    findInput() {
+
+    filterInput() {
       this.numOfPage = 1;
     },
+
     slicedTable() {
       this.slicedTable.length === 0 && this.numOfPage > 1 ? this.numOfPage-- : null;
+    },
+
+    coinSearchInput() {
+      this.fetchCoins.then((coinsList) => {
+        const filteredCoins = Object.values(coinsList).filter((coin) =>
+          coin.Symbol.startsWith(this.coinSearchInput.toUpperCase())
+        );
+        this.patternsField = filteredCoins.slice(0, 4).map((coin) => coin.Symbol);
+      });
     }
   }
 };
