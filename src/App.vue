@@ -107,7 +107,7 @@
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
             class="cursor-pointer overflow-hidden rounded-lg border-solid border-purple-800 bg-white shadow"
-            v-for="t in slicedTable"
+            v-for="t in paginationTable"
             :key="t.name"
             :class="{
               'border-2': selectedCoin === t
@@ -118,7 +118,7 @@
               <dt class="truncate text-sm font-medium text-gray-500">
                 {{ t.name.toUpperCase() }} - USD
               </dt>
-              <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ t.price }}</dd>
+              <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ formatPrice(t.price) }}</dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
             <button
@@ -186,7 +186,7 @@
 </template>
 
 <script>
-import { loadCoins } from './api';
+import { subscribeToCoinUpdates, unsubscribeFromCoinUpdates } from './api';
 
 export default {
   name: 'App',
@@ -222,9 +222,17 @@ export default {
     if (coinsDataLS) {
       this.arrayOfAddedCoins = JSON.parse(coinsDataLS);
       this.arrayOfAddedCoins.forEach((coin) => {
-        this.subscribeToUpdates(coin.name);
+        subscribeToCoinUpdates(coin.name.toUpperCase(), (newPrice) =>
+          this.updateCoins(coin.name, newPrice)
+        );
+      });
+
+      this.arrayOfAddedCoins.forEach((coin) => {
+        this.graphStates[coin.name] = [];
       });
     }
+
+    // setInterval(this.updateCoins, 5000);
   },
 
   computed: {
@@ -236,13 +244,7 @@ export default {
       return this.numOfPage * 6;
     },
 
-    filteredCoins() {
-      return this.arrayOfAddedCoins.filter((coin) =>
-        coin.name.toUpperCase().startsWith(this.filterInput.toUpperCase())
-      );
-    },
-
-    slicedTable() {
+    paginationTable() {
       return this.filteredCoins.slice(this.startIndex, this.endIndex);
     },
 
@@ -250,39 +252,67 @@ export default {
       return this.filteredCoins.length > this.endIndex;
     },
 
+    filteredCoins() {
+      return this.arrayOfAddedCoins.filter((coin) =>
+        coin.name.toUpperCase().startsWith(this.filterInput.toUpperCase())
+      );
+    },
+
     normalizedGraph() {
-      const choosenCoin = this.graphStates[this.selectedCoin.name.toUpperCase()];
-      const maxValue = Math.max(...choosenCoin);
-      const minValue = Math.min(...choosenCoin);
+      const chosenCoin = this.graphStates[this.selectedCoin.name];
+      const maxValue = Math.max(...chosenCoin);
+      const minValue = Math.min(...chosenCoin);
       return maxValue === minValue
-        ? choosenCoin.map(() => 56)
-        : choosenCoin.map((state) => ((state - minValue) * 256) / (maxValue - minValue));
+        ? chosenCoin.map(() => 56)
+        : chosenCoin.map((state) => ((state - minValue) * 256) / (maxValue - minValue));
       // ? https://wiki.loginom.ru/articles/data-normalization.html
     }
   },
 
   methods: {
-    subscribeToUpdates(coinName) {
-      this.graphStates[coinName.toUpperCase()] = new Array();
-      setInterval(async () => {
-        const dataExchange = await loadCoins(coinName);
-        this.arrayOfAddedCoins.find((coin) => coin.name === coinName).price = dataExchange.USD;
-        this.graphStates[coinName.toUpperCase()].push(dataExchange.USD);
-      }, 5000);
+    formatPrice(price) {
+      // ! только для отображения в темплейте, в логике не используется
+      if (price == '-') {
+        return;
+      }
+      return price > 1 ? Number(price).toFixed(2) : Number(price).toPrecision(2);
     },
 
-    addCoin() {
+    updateCoins(coinName, price) {
+      this.arrayOfAddedCoins
+        .filter((coin) => coin.name === coinName)
+        .forEach((coin) => {
+          coin.price = price;
+        });
+    },
+    // async updateCoins() {
+    // if (!this.arrayOfAddedCoins.length) {
+    //   return;
+    // }
+    // const dataExchange = await loadCoins(this.arrayOfAddedCoins.map((coin) => coin.name));
+    // this.arrayOfAddedCoins.forEach((coin) => {
+    //   const price = dataExchange[coin.name.toUpperCase()];
+    //   coin.price = price ?? '-';
+    //   this.graphStates[coin.name].push(coin.price);
+    // });
+    // },
+
+    async addCoin() {
       const isCoinInArr = this.arrayOfAddedCoins.find(
         (coin) => coin.name.toUpperCase() === this.coinSearchInput.toUpperCase()
       );
-      if (this.coinSearchInput && !isCoinInArr && this.patternsField.length) {
-        const currentTicker = {
+      if (this.coinSearchInput && !isCoinInArr) {
+        const currentCoin = {
           name: this.coinSearchInput,
           price: 0
         };
+        this.arrayOfAddedCoins.push(currentCoin);
 
-        this.arrayOfAddedCoins.push(currentTicker);
-        this.subscribeToUpdates(currentTicker.name);
+        this.graphStates[currentCoin.name] = [];
+
+        subscribeToCoinUpdates(currentCoin.name.toUpperCase(), (newPrice) => {
+          this.updateCoins(currentCoin.name, newPrice);
+        });
 
         this.coinSearchInput = '';
         this.filterInput = '';
@@ -298,9 +328,10 @@ export default {
       this.addCoin();
     },
 
-    handleDelete(coin) {
-      this.arrayOfAddedCoins = this.arrayOfAddedCoins.filter((c) => c !== coin);
+    handleDelete(coinToRemove) {
+      this.arrayOfAddedCoins = this.arrayOfAddedCoins.filter((c) => c !== coinToRemove);
       this.selectedCoin = null;
+      unsubscribeFromCoinUpdates(coinToRemove.name);
     }
   },
   watch: {
@@ -319,8 +350,8 @@ export default {
       this.numOfPage = 1;
     },
 
-    slicedTable() {
-      this.slicedTable.length === 0 && this.numOfPage > 1 ? this.numOfPage-- : null;
+    paginationTable() {
+      this.paginationTable.length === 0 && this.numOfPage > 1 ? this.numOfPage-- : null;
     },
 
     coinSearchInput() {
